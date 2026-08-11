@@ -11,10 +11,17 @@ const createJestConfig = nextJest({ dir: "./" });
  * Runs serially - the tests truncate shared tables between cases.
  */
 const config: Config = {
+  moduleNameMapper: {
+    "^server-only$": "<rootDir>/tests/mocks/server-only.ts",
+  },
   testEnvironment: "node",
   setupFiles: ["<rootDir>/tests/integration/setup-env.ts"],
   testMatch: ["<rootDir>/tests/integration/**/*.test.ts"],
   testTimeout: 30_000,
+  // Every suite truncates the same shared database, so they must not overlap.
+  // Set here rather than only via --runInBand so running jest directly against
+  // this config is still safe.
+  maxWorkers: 1,
 };
 
 export default createJestConfig(config);

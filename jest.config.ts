@@ -9,6 +9,9 @@ const createJestConfig = nextJest({ dir: "./" });
  * jest.integration.config.ts and runs separately.
  */
 const config: Config = {
+  moduleNameMapper: {
+    "^server-only$": "<rootDir>/tests/mocks/server-only.ts",
+  },
   testEnvironment: "jsdom",
   setupFilesAfterEnv: ["<rootDir>/jest.setup.ts"],
   testMatch: ["<rootDir>/tests/unit/**/*.test.ts", "<rootDir>/tests/unit/**/*.test.tsx"],

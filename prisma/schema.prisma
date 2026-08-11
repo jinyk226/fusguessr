@@ -129,8 +129,14 @@ model Pokemon {
 model Fusion {
   id String @id @default(cuid())
 
-  /// Always canonical: pokemonAId < pokemonBId. Enforced by
-  /// canonicalPair() at every write site.
+  /// Always canonical: pokemonAId < pokemonBId.
+  ///
+  /// Callers should go through canonicalPair(), but the ordering is also
+  /// enforced by a CHECK constraint added in the
+  /// 20260811042000_enforce_canonical_pair_order migration, so no code path -
+  /// including raw SQL - can store (B,A) alongside an existing (A,B).
+  /// Prisma has no schema syntax for CHECK constraints, hence the raw
+  /// migration.
   pokemonAId Int
   pokemonBId Int
   pokemonA   Pokemon @relation("FusionA", fields: [pokemonAId], references: [id])
