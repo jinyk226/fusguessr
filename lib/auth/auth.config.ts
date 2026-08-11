@@ -2,13 +2,16 @@ import type { NextAuthConfig } from "next-auth";
 import Google from "next-auth/providers/google";
 
 /**
- * Edge-safe half of the Auth.js configuration.
+ * Adapter-free half of the Auth.js configuration, used by proxy.ts.
  *
- * middleware.ts runs on the Edge runtime, where the Prisma adapter cannot go.
- * This half carries only what a route guard needs - the provider list and the
- * token/session shape - and is spread into the full Node-runtime config in
- * lib/auth/auth.ts, which adds the adapter and the database-backed role
- * bootstrap.
+ * It carries only what a route guard needs - the provider list and the
+ * token/session shape - and is spread into the full config in lib/auth/auth.ts,
+ * which adds the Prisma adapter and the database-backed role bootstrap.
+ *
+ * Next 16's proxy runs on Node.js, so the adapter would technically load here
+ * now (it could not on Next 15, where this ran on Edge). Keeping it out is
+ * still the right call: the proxy runs on nearly every request, and it has no
+ * need to open a database connection just to read a JWT.
  */
 export const authConfig = {
   providers: [Google],
@@ -18,9 +21,9 @@ export const authConfig = {
   },
 
   session: {
-    // JWT rather than database sessions, so middleware can check auth on the
-    // Edge without a database round trip. The Prisma adapter still persists
-    // users and linked accounts.
+    // JWT rather than database sessions, so the proxy can check auth without
+    // a database round trip on every request. The Prisma adapter still
+    // persists users and linked accounts.
     strategy: "jwt",
   },
 

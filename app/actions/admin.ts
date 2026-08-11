@@ -20,7 +20,7 @@ import { isValidLaDateString } from "@/lib/time/la-date";
  * Admin Server Actions.
  *
  * Every one of these calls requireAdmin() in its own body. The /admin layout
- * and middleware both gate the routes, but Server Actions are individually
+ * and proxy both gate the routes, but Server Actions are individually
  * addressable endpoints - a layout guard does not protect them, so the check
  * cannot live only there.
  */
