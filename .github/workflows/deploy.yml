@@ -1,0 +1,77 @@
+name: Deploy to Cloud Run
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Required for Workload Identity Federation: GitHub mints a short-lived OIDC
+# token that GCP exchanges for credentials, so no long-lived service account
+# JSON key is ever stored in repository secrets.
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  SERVICE: fusguessr
+  REGION: us-central1
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Artifact Registry auth
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and push image
+        env:
+          IMAGE: ${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/fusguessr/app:${{ github.sha }}
+        run: |
+          # NEXT_PUBLIC_* must be a build arg: it is inlined into the client
+          # bundle here, and a runtime env var would arrive too late.
+          docker build \
+            --build-arg NEXT_PUBLIC_APP_URL="${{ secrets.APP_URL }}" \
+            -t "$IMAGE" .
+          docker push "$IMAGE"
+
+      # Migrations run as their own step, before traffic moves. Running them on
+      # container start would let concurrently-starting Cloud Run instances race
+      # each other applying the same migration.
+      - name: Run database migrations
+        env:
+          IMAGE: ${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/fusguessr/app:${{ github.sha }}
+        run: |
+          gcloud run jobs deploy fusguessr-migrate \
+            --image "$IMAGE" \
+            --region "$REGION" \
+            --service-account "${{ secrets.GCP_RUNTIME_SERVICE_ACCOUNT }}" \
+            --set-cloudsql-instances "${{ secrets.CLOUD_SQL_INSTANCE }}" \
+            --set-secrets "DATABASE_URL=fusguessr-database-url:latest" \
+            --command npx --args "prisma,migrate,deploy" \
+            --quiet
+          gcloud run jobs execute fusguessr-migrate --region "$REGION" --wait
+
+      - name: Deploy to Cloud Run
+        env:
+          IMAGE: ${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/fusguessr/app:${{ github.sha }}
+        run: |
+          gcloud run deploy "$SERVICE" \
+            --image "$IMAGE" \
+            --region "$REGION" \
+            --service-account "${{ secrets.GCP_RUNTIME_SERVICE_ACCOUNT }}" \
+            --add-cloudsql-instances "${{ secrets.CLOUD_SQL_INSTANCE }}" \
+            --set-env-vars "AUTH_TRUST_HOST=true,GOOGLE_CLOUD_PROJECT=${{ secrets.GCP_PROJECT_ID }},VERTEX_LOCATION=${{ env.REGION }},GCS_BUCKET=${{ secrets.GCS_BUCKET }},NEXT_PUBLIC_APP_URL=${{ secrets.APP_URL }}" \
+            --set-secrets "DATABASE_URL=fusguessr-database-url:latest,AUTH_SECRET=fusguessr-auth-secret:latest,AUTH_GOOGLE_ID=fusguessr-google-id:latest,AUTH_GOOGLE_SECRET=fusguessr-google-secret:latest,ADMIN_EMAILS=fusguessr-admin-emails:latest,CRON_SECRET=fusguessr-cron-secret:latest" \
+            --max-instances 4 \
+            --port 8080 \
+            --quiet
