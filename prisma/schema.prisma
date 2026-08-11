@@ -1,0 +1,249 @@
+// fusguessr data model.
+//
+// Two invariants are encoded here rather than in application code, because they
+// are the ones that would silently corrupt the game if a code path ever forgot
+// them:
+//   1. A Pokemon pair can never be fused twice  -> @@unique([pokemonAId, pokemonBId])
+//      Pairs are always stored canonically (A < B) via lib/game/canonical-pair.ts.
+//   2. A user gets one attempt per puzzle, ever -> @@unique([userId, fusionId])
+
+generator client {
+  provider      = "prisma-client-js"
+  // "native" covers local dev; the debian target matches the node:22-slim
+  // runtime image used for Cloud Run (see Dockerfile).
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum FusionStatus {
+  DRAFT // generated into the bank, not yet reviewed
+  APPROVED // admin liked it; eligible to be scheduled
+  SCHEDULED // assigned to a specific future calendar date
+  LIVE // today's public puzzle
+  ARCHIVED // a previously-live puzzle
+}
+
+enum AttemptStatus {
+  IN_PROGRESS
+  WON
+  LOST
+}
+
+enum GuessHint {
+  CORRECT
+  SAME_LINE
+  WRONG
+}
+
+// ---------------------------------------------------------------------------
+// Auth.js (NextAuth v5) models - shapes are dictated by @auth/prisma-adapter.
+// ---------------------------------------------------------------------------
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  role          Role      @default(USER)
+  createdAt     DateTime  @default(now())
+
+  accounts Account[]
+  sessions Session[]
+  attempts Attempt[]
+}
+
+model Account {
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([provider, providerAccountId])
+}
+
+model Session {
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@id([identifier, token])
+}
+
+// ---------------------------------------------------------------------------
+// Game reference data
+// ---------------------------------------------------------------------------
+
+/// National dex 1-386 (Kanto through Hoenn), seeded from a committed PokeAPI
+/// snapshot. Never fetched live at request time.
+model Pokemon {
+  id   Int    @id // national dex number
+  name String
+
+  /// Groups whole evolution families, including branching ones (Eevee,
+  /// Wurmple -> Silcoon/Cascoon, Tyrogue). Drives the SAME_LINE hint.
+  evolutionChainId Int
+
+  types      String[]
+  /// Gen III (Ruby/Sapphire) front sprite: 64x64, 4bpp indexed colour.
+  /// From sprites.versions["generation-iii"]["ruby-sapphire"].front_default.
+  spriteUrl  String
+  generation Int
+
+  fusionsAsA Fusion[] @relation("FusionA")
+  fusionsAsB Fusion[] @relation("FusionB")
+
+  @@index([evolutionChainId])
+}
+
+// ---------------------------------------------------------------------------
+// Puzzles
+// ---------------------------------------------------------------------------
+
+model Fusion {
+  id String @id @default(cuid())
+
+  /// Always canonical: pokemonAId < pokemonBId. Enforced by
+  /// canonicalPair() at every write site.
+  pokemonAId Int
+  pokemonBId Int
+  pokemonA   Pokemon @relation("FusionA", fields: [pokemonAId], references: [id])
+  pokemonB   Pokemon @relation("FusionB", fields: [pokemonBId], references: [id])
+
+  /// Optional and blank by default; admin may fill one in later.
+  name String?
+
+  basePromptSnapshot String
+  extraPrompt        String?
+
+  /// Post-processed pixel-art image shown to players.
+  imageUrl        String
+  imageGcsPath    String
+  /// Raw pre-post-processing Vertex output, kept for admin QA comparison.
+  rawImageUrl     String?
+  rawImageGcsPath String?
+
+  /// Zoom focal point as percentages (0-100), clamped to 25-75 in practice.
+  focalX Float @default(50)
+  focalY Float @default(50)
+
+  /// Bumped on every image regeneration.
+  version Int @default(1)
+
+  status FusionStatus @default(DRAFT)
+
+  /// America/Los_Angeles calendar dates, "YYYY-MM-DD".
+  scheduledForDate String?
+  liveDate         String?
+
+  createdByAdminId String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  attempts    Attempt[]
+  generations FusionGeneration[]
+
+  @@unique([pokemonAId, pokemonBId])
+  @@unique([scheduledForDate])
+  @@unique([liveDate])
+  @@index([status])
+}
+
+/// Audit trail of every Vertex AI call, for cost/quality debugging.
+model FusionGeneration {
+  id         String   @id @default(cuid())
+  fusionId   String
+  fusion     Fusion   @relation(fields: [fusionId], references: [id], onDelete: Cascade)
+  promptFull String
+  imageUrl   String
+  createdAt  DateTime @default(now())
+
+  @@index([fusionId])
+}
+
+// ---------------------------------------------------------------------------
+// Play
+// ---------------------------------------------------------------------------
+
+model Attempt {
+  id       String @id @default(cuid())
+  userId   String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fusionId String
+  fusion   Fusion @relation(fields: [fusionId], references: [id], onDelete: Cascade)
+
+  /// LA calendar date this attempt counts for.
+  date String
+
+  /// Admin day-ahead QA plays. Excluded from every public/aggregate stat.
+  isAdminPreview Boolean @default(false)
+
+  status      AttemptStatus @default(IN_PROGRESS)
+  guessesUsed Int           @default(0)
+  startedAt   DateTime      @default(now())
+  completedAt DateTime?
+
+  guesses Guess[]
+
+  @@unique([userId, fusionId])
+  @@index([userId, date])
+}
+
+model Guess {
+  id        String  @id @default(cuid())
+  attemptId String
+  attempt   Attempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+
+  guessIndex Int // 1-based
+
+  pokemonAId Int
+  pokemonBId Int
+
+  /// Denormalised so guess history renders without recomputation.
+  hintA     GuessHint
+  hintB     GuessHint
+  isCorrect Boolean
+
+  createdAt DateTime @default(now())
+
+  @@unique([attemptId, guessIndex])
+}
+
+/// Observability for the daily rollover cron. Also the signal the admin
+/// dashboard reads to warn that no puzzle was staged for a given day.
+model RolloverLog {
+  id           String   @id @default(cuid())
+  ranAt        DateTime @default(now())
+  laDate       String
+  fromFusionId String?
+  toFusionId   String?
+  note         String?
+
+  @@index([laDate])
+}
