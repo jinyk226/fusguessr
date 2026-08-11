@@ -97,7 +97,7 @@ which is deliberate. Demote by changing the database.
 | Game logic | `lib/game/` | Pure and unit tested: grading, zoom curve, streaks, share text |
 | Puzzle lifecycle | `lib/game/fusion-service.ts`, `lib/game/rollover.ts` | `DRAFT → APPROVED → SCHEDULED → LIVE → ARCHIVED` |
 | Image pipeline | `lib/vertex/`, `lib/image/`, `lib/gcs/` | Server-only; each has a single mockable seam |
-| Auth | `lib/auth/` | Auth.js v5 split config (edge + Node halves) |
+| Auth | `lib/auth/` | Auth.js v5; `proxy.ts` gates routes, actions re-check the DB |
 | Time | `lib/time/la-date.ts` | Every LA-time conversion goes through here |
 
 A few decisions worth knowing about before changing things:
@@ -249,7 +249,12 @@ users**, and its refresh tokens expire after 7 days. Add your own email as a
 test user and expect to re-authenticate periodically.
 
 **L4 — Auth.js v5 is still on the `beta` dist-tag** (`next-auth@5.0.0-beta.32`).
-That is the expected way to use v5 today, but pin it — betas move.
+That is the expected way to use v5 today, but pin it — betas move. It does
+declare `next: ^16.0.0` as a peer dependency, so Next 16 is supported.
+
+**L10 — Route guards live in `proxy.ts`, not `middleware.ts`.** Next 16 renamed
+the file and the exported function, and moved the hook off Edge onto the
+Node.js runtime. `middleware.ts` still works but is deprecated.
 
 **L5 — Never point `TEST_DATABASE_URL` at your dev database.** The integration
 suite truncates every table between cases. It refuses to run against a URL

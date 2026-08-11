@@ -9,7 +9,7 @@ import { auth } from "./auth";
  * Authorisation helpers.
  *
  * These re-read the role from the database rather than trusting the session
- * token. middleware.ts gates whole routes off the token for speed, but a token
+ * token. proxy.ts gates whole routes off the token for speed, but a token
  * issued before a role change is stale, and Server Actions are individually
  * addressable - a layout guard does not protect them. Every admin action calls
  * requireAdmin() in its own body.
