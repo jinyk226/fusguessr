@@ -230,6 +230,24 @@ in LA time anyway, and is safe to call at any hour or any number of times.
 
 ---
 
+## Prisma Upgrade to v7
+
+### Changes Made
+- Updated `@prisma/client` and `prisma` to version 7.0.0
+- Added PostgreSQL adapter `@prisma/adapter-pg`
+- Configured ES module support in `package.json`
+
+### Steps to Follow
+1. Ensure `prisma.config.ts` is configured with correct database URLs
+2. Update TypeScript config for ES module support
+3. Run `prisma generate` and `prisma migrate dev` after code changes
+
+### Environment Variables
+- `DATABASE_URL` and `TEST_DATABASE_URL` should point to local Docker instances
+- Use `prisma db seed` for seeding with new configuration
+
+---
+
 ## Gotchas
 
 ### Local

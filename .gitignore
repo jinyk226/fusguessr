@@ -46,3 +46,6 @@ next-env.d.ts
 
 # Locally-generated placeholder fusion images (FUSGUESSR_FAKE_IMAGE_PIPELINE)
 /public/generated
+
+# Prisma generated folder
+/prisma/generated

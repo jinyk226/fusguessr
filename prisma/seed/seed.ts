@@ -6,11 +6,13 @@
  * Regenerate the snapshot itself with `npm run pokemon:cache`.
  */
 
-import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from '@prisma/adapter-pg'
+import { PrismaClient } from "@/prisma/generated/prisma";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-const prisma = new PrismaClient();
+const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL })
+const prisma = new PrismaClient({ adapter });
 
 interface PokemonCacheEntry {
   id: number;
