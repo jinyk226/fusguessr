@@ -35,7 +35,7 @@ interface PokemonComboboxProps {
 }
 
 /** Capitalises a dex name for display; the data is stored lowercase. */
-function displayName(name: string): string {
+export function displayName(name: string): string {
   return name
     .split("-")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
