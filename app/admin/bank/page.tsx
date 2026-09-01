@@ -3,7 +3,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/db/prisma";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { displayName } from "@/components/game/pokemon-combobox";
+import { DisplayName } from "@/components/game/pokemon-combobox";
 import { GenerateFusionForm } from "@/components/admin/generate-fusion-form";
 import { BatchScheduleForm } from "@/components/admin/batch-schedule-form";
 import { formatLaDateForDisplay } from "@/lib/time/la-date";
@@ -65,8 +65,8 @@ export default async function BankPage() {
                   />
                   <span className="flex flex-1 flex-col">
                     <span className="font-medium">
-                      {displayName(fusion.pokemonA.name)} +{" "}
-                      {displayName(fusion.pokemonB.name)}
+                      {<DisplayName name={fusion.pokemonA.name} />} +{" "}
+                      {<DisplayName name={fusion.pokemonB.name} />}
                     </span>
                     <span className="text-xs text-[var(--muted-foreground)]">
                       {fusion.name ? `"${fusion.name}" - ` : ""}v{fusion.version}

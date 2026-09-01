@@ -35,12 +35,14 @@ interface PokemonComboboxProps {
 }
 
 /** Capitalises a dex name for display; the data is stored lowercase. */
-export function displayName(name: string): string {
+function displayName(name: string): string {
   return name
     .split("-")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
 }
+
+export const DisplayName = ({ name }: { name: string }) => (<>displayName(name)</>);
 
 /**
  * Searchable picker over the full 386-entry dex.

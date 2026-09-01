@@ -8,7 +8,7 @@ import { FusionImage } from "./fusion-image";
 import { GuessHistory, type HistoryGuess } from "./guess-history";
 import {
   PokemonCombobox,
-  displayName,
+  DisplayName,
   type PokemonOption,
 } from "./pokemon-combobox";
 import { submitGuessAction } from "@/app/actions/game";
@@ -185,8 +185,8 @@ export function GameBoard({
           </p>
           {answer && (
             <p className="text-sm text-[var(--muted-foreground)]">
-              It was <strong>{displayName(answer.a)}</strong> fused with{" "}
-              <strong>{displayName(answer.b)}</strong>.
+              It was <strong>{<DisplayName name={answer.a} />}</strong> fused with{" "}
+              <strong>{<DisplayName name={answer.b} />}</strong>.
             </p>
           )}
           <Button variant="outline" onClick={handleShare}>
